@@ -8,6 +8,7 @@ import com.mongodb.user.repository.UserRepository;
 import com.mongodb.utils.ValidationHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -31,6 +32,20 @@ public class UserRoutesHandler {
 
     public UserRoutesHandler() {}
 
+    public Mono<ServerResponse> getById(ServerRequest req) {
+        String id = req.pathVariable("id");
+        String authorizationHeader = req.headers().firstHeader("Authorization");
+        return userRepository.findByAuth0Id(id)
+                .flatMap(user -> this.getAuth0IdFromToken(authorizationHeader)
+                        .flatMap(decodedAuth0Id -> {
+                            if (!decodedAuth0Id.equals(user.getAuth0Id())) {
+                                return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Credentials mismatch"));
+                            }
+                            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).bodyValue(convertToDto(user));
+                        }))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")));
+    }
+
     public Mono<ServerResponse> create(ServerRequest req) {
         return req.bodyToMono(UserPOSTReq.class) // Extract the UserPOSTReq object from the request body
                 .flatMap(userPostReq -> {
@@ -50,7 +65,7 @@ public class UserRoutesHandler {
     public Mono<ServerResponse> patch(ServerRequest req) {
         String id = req.pathVariable("id");
         String authorizationHeader = req.headers().firstHeader("Authorization");
-        return userRepository.findById(id)
+        return userRepository.findByAuth0Id(id)
                 .flatMap(user -> this.getAuth0IdFromToken(authorizationHeader)
                         .flatMap(decodedAuth0Id -> {
                             if (!decodedAuth0Id.equals(user.getAuth0Id())) {
@@ -72,11 +87,7 @@ public class UserRoutesHandler {
     }
 
     private UserDto convertToDto(User user) {
-        UserDto userDto = new UserDto();
-        userDto.setAuth0Id(user.getAuth0Id());
-        userDto.setId(user.getEmail());
-        userDto.setId(user.getId());
-        return userDto;
+        return new UserDto(user);
     }
 
     private Mono<String> getAuth0IdFromToken(String authorizationHeader) {

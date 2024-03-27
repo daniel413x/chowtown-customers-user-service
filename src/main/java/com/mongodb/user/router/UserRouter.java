@@ -17,6 +17,7 @@ public class UserRouter {
                 .route()
                 .nest(RequestPredicates.path("/api/user"), builder -> {
                     builder.POST("", userRoutesHandler::create);
+                    builder.GET("/{id}", userRoutesHandler::getById);
                     builder.PATCH("/{id}", userRoutesHandler::patch);
                 })
                 .build();
