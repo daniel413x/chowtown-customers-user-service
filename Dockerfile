@@ -12,5 +12,5 @@ RUN mvn clean package && \
 FROM openjdk:17-slim
 WORKDIR /app
 COPY --from=build /tmp/ ./
-EXPOSE 5000
+EXPOSE 5001
 CMD ["java", "-jar", "app.jar"]

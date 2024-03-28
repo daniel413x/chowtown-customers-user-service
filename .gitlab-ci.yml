@@ -1,0 +1,108 @@
+stages:
+  - build
+  - unit_test
+  - push
+  - containerize_for_staging
+  - test_staged
+  - containerize_for_deployment
+  - test_deployed
+
+variables:
+  PROJECT_GROUP: chowtown
+  THIS_SERVICE: mongo
+  PRODUCTION_VERSION: "1.0.0"
+  DOCKER_IMAGE_NAME: "$DOCKER_ACCOUNT_NAME/$PROJECT_GROUP-$THIS_SERVICE"
+
+build app:
+  except:
+    - main
+    - staging
+  stage: build
+  image: node:18-alpine
+  script:
+    - mvn clean package -DskipTests
+    - mvn checkstyle:check
+
+unit test app:
+  except:
+    - main
+    - staging
+  stage: unit_test
+  image: node:18-alpine
+  script:
+    - mvn test
+
+.containerize:
+  image: docker:20.10.12
+  services:
+    - docker:20.10.12-dind
+  before_script:
+    - echo $DOCKER_PASSWORD | docker login -u $DOCKER_ACCOUNT_NAME --password-stdin
+    - export VERSIONED_IMAGE=$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_V
+    - docker build -t $VERSIONED_IMAGE .
+    - docker image ls
+    - docker push $VERSIONED_IMAGE
+    - >
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        export LATEST_PROD_IMAGE=$DOCKER_IMAGE_NAME:production-latest
+        docker tag $VERSIONED_IMAGE $LATEST_PROD_IMAGE
+        docker image ls
+        docker push $LATEST_PROD_IMAGE
+      fi
+
+push to staging:
+  except:
+    - main
+    - staging
+  stage: push
+  script:
+    - git config user.email "$GITLAB_ACCOUNT_NAME@gmail.com"
+    - git config user.name "$GITLAB_ACCOUNT_NAME"
+    - git remote remove origin
+    - git remote add origin https://oauth2:$WRITE_TOKEN@gitlab.com/$GITLAB_ACCOUNT_NAME/$PROJECT_GROUP-$THIS_SERVICE.git
+    - git branch staging
+    - git push -f origin staging
+
+containerize for staging:
+  only:
+    - staging
+  stage: containerize_for_staging
+  variables:
+    DOCKER_IMAGE_V: "staging"
+  extends:
+    - .containerize
+  script:
+    - echo
+
+.cypress_tests:
+  image: cypress/base:20.5.0
+  script:
+    - git clone https://oauth2:$WRITE_TOKEN@gitlab.com/$GITLAB_ACCOUNT_NAME/$PROJECT_GROUP-tests.git cypress
+    - cd cypress
+    - npm install
+    - npm run cypress:run
+
+test staging app:
+  only:
+    - staging
+  stage: test_staged
+  environment: staging
+  extends: .cypress_tests
+
+containerize for deploying:
+  only:
+    - main
+  stage: containerize_for_deployment
+  variables:
+    DOCKER_IMAGE_V: production-$PRODUCTION_VERSION
+  extends:
+    - .containerize
+  script:
+    - echo
+
+test deployed app:
+  only:
+    - main
+  stage: test_deployed
+  environment: production
+  extends: .cypress_tests
