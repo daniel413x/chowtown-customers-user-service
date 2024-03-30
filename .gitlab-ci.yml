@@ -9,16 +9,15 @@ stages:
 
 variables:
   PROJECT_GROUP: chowtown
-  THIS_SERVICE: mongo
+  SERVICE_NAME: mongo
   PRODUCTION_VERSION: "1.0.0"
-  DOCKER_IMAGE_NAME: "$DOCKER_ACCOUNT_NAME/$PROJECT_GROUP-$THIS_SERVICE"
 
 build app:
   except:
     - main
     - staging
   stage: build
-  image: node:18-alpine
+  image: maven:3-openjdk-17
   script:
     - mvn clean package -DskipTests
     - mvn checkstyle:check
@@ -28,27 +27,19 @@ unit test app:
     - main
     - staging
   stage: unit_test
-  image: node:18-alpine
+  image: maven:3-openjdk-17
   script:
     - mvn test
 
 .containerize:
-  image: docker:20.10.12
-  services:
-    - docker:20.10.12-dind
+  image: google/cloud-sdk:alpine
   before_script:
-    - echo $DOCKER_PASSWORD | docker login -u $DOCKER_ACCOUNT_NAME --password-stdin
-    - export VERSIONED_IMAGE=$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_V
-    - docker build -t $VERSIONED_IMAGE .
-    - docker image ls
-    - docker push $VERSIONED_IMAGE
-    - >
-      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
-        export LATEST_PROD_IMAGE=$DOCKER_IMAGE_NAME:production-latest
-        docker tag $VERSIONED_IMAGE $LATEST_PROD_IMAGE
-        docker image ls
-        docker push $LATEST_PROD_IMAGE
-      fi
+    - cat $GCP_CLOUD_BUILD_SERVICE_KEY > /tmp/gcloud-service-key.json
+    - gcloud auth activate-service-account --key-file /tmp/gcloud-service-key.json
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud builds submit . --config=cloudbuild.yml --substitutions _GCP_PROJECT_ID=$GCP_PROJECT_ID,_SERVICE_NAME=$SERVICE_NAME,_IMAGE_V=$IMAGE_V,_PORT=$PORT,_API_SVC_ADDRESS=$API_SVC_ADDRESS,_CLIENT_SVC_ADDRESS=$CLIENT_SVC_ADDRESS,_MONGODB_CONNECTION_STRING=$MONGODB_CONNECTION_STRING,_MONGODB_DATABASE=$MONGODB_DATABASE,_AUTH0_ISSUER_BASE_URL=$AUTH0_ISSUER_BASE_URL,_AUTH0_AUDIENCE=$AUTH0_AUDIENCE
+  after_script:
+    - rm /tmp/gcloud-service-key.json
 
 push to staging:
   except:
@@ -59,7 +50,7 @@ push to staging:
     - git config user.email "$GITLAB_ACCOUNT_NAME@gmail.com"
     - git config user.name "$GITLAB_ACCOUNT_NAME"
     - git remote remove origin
-    - git remote add origin https://oauth2:$WRITE_TOKEN@gitlab.com/$GITLAB_ACCOUNT_NAME/$PROJECT_GROUP-$THIS_SERVICE.git
+    - git remote add origin https://oauth2:$WRITE_TOKEN@gitlab.com/$GITLAB_ACCOUNT_NAME/$PROJECT_GROUP-$SERVICE_NAME.git
     - git branch staging
     - git push -f origin staging
 
@@ -68,7 +59,7 @@ containerize for staging:
     - staging
   stage: containerize_for_staging
   variables:
-    DOCKER_IMAGE_V: "staging"
+    IMAGE_V: "staging"
   extends:
     - .containerize
   script:
@@ -94,7 +85,7 @@ containerize for deploying:
     - main
   stage: containerize_for_deployment
   variables:
-    DOCKER_IMAGE_V: production-$PRODUCTION_VERSION
+    IMAGE_V: "production"
   extends:
     - .containerize
   script:
