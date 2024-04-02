@@ -1,4 +1,4 @@
-package com.mongodb.user.dto;
+package com.user.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;

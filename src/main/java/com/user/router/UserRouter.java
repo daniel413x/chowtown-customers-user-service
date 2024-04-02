@@ -1,6 +1,6 @@
-package com.mongodb.user.router;
+package com.user.router;
 
-import com.mongodb.user.handlers.UserRoutesHandler;
+import com.user.handlers.UserRoutesHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.server.RequestPredicates;

@@ -1,11 +1,11 @@
-package com.mongodb.user.handlers;
+package com.user.handlers;
 
-import com.mongodb.user.dto.UserDto;
-import com.mongodb.user.dto.UserPATCHReq;
-import com.mongodb.user.dto.UserPOSTReq;
-import com.mongodb.user.model.User;
-import com.mongodb.user.repository.UserRepository;
-import com.mongodb.utils.ValidationHandler;
+import com.user.dto.UserDto;
+import com.user.dto.UserPATCHReq;
+import com.user.dto.UserPOSTReq;
+import com.user.model.User;
+import com.user.repository.UserRepository;
+import com.user.utils.ValidationHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
